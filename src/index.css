@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@theme {
+  --color-primary: #6366f1;
+  --color-primary-dark: #4f46e5;
+  --color-secondary: #22d3ee;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-dark-bg: #0f0f1a;
+  --color-dark-surface: #1a1a2e;
+  --color-dark-border: #2d2d44;
+}
+
+html {
+  @apply bg-dark-bg;
+}
+
+body {
+  @apply bg-dark-bg text-white min-h-screen antialiased;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0;
+}
+
+/* Prevent pull-to-refresh on mobile */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Custom scrollbar for dark mode */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-dark-surface;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-dark-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary;
+}
+
+/* Leaflet customizations for dark mode */
+.leaflet-container {
+  @apply bg-dark-surface rounded-xl;
+}
+
+.leaflet-tile-pane {
+  filter: brightness(0.8) contrast(1.1) saturate(0.8);
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+}
+
+.leaflet-control-zoom a {
+  background: #1a1a2e !important;
+  color: white !important;
+  border-color: #2d2d44 !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #2d2d44 !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(26, 26, 46, 0.8) !important;
+  color: #9ca3af !important;
+  font-size: 10px !important;
+}
+
+/* Pulsing location marker */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.location-marker-pulse {
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* Alarm screen animations */
+@keyframes alarm-flash {
+  0%, 100% {
+    background-color: #000;
+  }
+  50% {
+    background-color: #1a1a2e;
+  }
+}
+
+.alarm-flash {
+  animation: alarm-flash 0.5s ease-in-out infinite;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Button press effect */
+.btn-press:active {
+  transform: scale(0.95);
+}
+
+/* Safe area padding for notched devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Direction arrow animation */
+@keyframes bounce-arrow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.bounce-arrow {
+  animation: bounce-arrow 1s ease-in-out infinite;
+}
