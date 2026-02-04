@@ -52,7 +52,34 @@ const userIcon = L.divIcon({
   iconAnchor: [10, 10]
 });
 
-const destinationIcon = createIcon('#ef4444', 28);
+const destinationIcon = L.divIcon({
+  className: 'destination-marker',
+  html: `
+    <div style="position: relative;">
+      <div style="
+        width: 36px;
+        height: 36px;
+        background: #ef4444;
+        border: 4px solid white;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+      "></div>
+      <div style="
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transform: rotate(-45deg);
+      "></div>
+    </div>
+  `,
+  iconSize: [36, 36],
+  iconAnchor: [18, 36]
+});
 
 // Component to handle map clicks
 function MapClickHandler({ onLocationSelect, isSelecting }) {
@@ -83,18 +110,44 @@ function MapCenterController({ position, shouldCenter }) {
 }
 
 // Component to fit bounds to show both user and destination
-function FitBoundsController({ userPosition, destination }) {
+function FitBoundsController({ userPosition, destination, trigger }) {
   const map = useMap();
 
   useEffect(() => {
-    if (userPosition && destination) {
+    if (trigger && userPosition && destination) {
       const bounds = L.latLngBounds(
         [userPosition.lat, userPosition.lon],
         [destination.lat, destination.lon]
       );
       map.fitBounds(bounds, { padding: [50, 50] });
     }
-  }, [userPosition, destination, map]);
+  }, [trigger, userPosition, destination, map]);
+
+  return null;
+}
+
+// Component to center map on destination
+function CenterOnDestination({ destination, trigger }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (trigger && destination) {
+      map.setView([destination.lat, destination.lon], 15);
+    }
+  }, [trigger, destination, map]);
+
+  return null;
+}
+
+// Component to center map on user position
+function CenterOnUser({ userPosition, trigger }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (trigger && userPosition) {
+      map.setView([userPosition.lat, userPosition.lon], 15);
+    }
+  }, [trigger, userPosition, map]);
 
   return null;
 }
@@ -111,6 +164,20 @@ export default function Map({
 }) {
   const mapRef = useRef(null);
   const [bearing, setBearing] = useState(null);
+  const [showBothLocations, setShowBothLocations] = useState(false);
+  const [centerDestinationTrigger, setCenterDestinationTrigger] = useState(0);
+  const [centerUserTrigger, setCenterUserTrigger] = useState(0);
+  const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0);
+  const prevDestinationRef = useRef(null);
+
+  // Center on destination when it changes
+  useEffect(() => {
+    if (destination && destination !== prevDestinationRef.current) {
+      prevDestinationRef.current = destination;
+      setShowBothLocations(false);
+      setCenterDestinationTrigger(t => t + 1);
+    }
+  }, [destination]);
 
   // Calculate bearing to destination
   useEffect(() => {
@@ -146,19 +213,31 @@ export default function Map({
           isSelecting={isSelecting}
         />
 
-        {centerOnUser && !fitBounds && (
+        {centerOnUser && !destination && (
           <MapCenterController
             position={userPosition}
             shouldCenter={!destination}
           />
         )}
 
-        {fitBounds && (
-          <FitBoundsController
-            userPosition={userPosition}
-            destination={destination}
-          />
-        )}
+        {/* Center on destination when selected */}
+        <CenterOnDestination
+          destination={destination}
+          trigger={centerDestinationTrigger}
+        />
+
+        {/* Center on user when button pressed */}
+        <CenterOnUser
+          userPosition={userPosition}
+          trigger={centerUserTrigger}
+        />
+
+        {/* Fit bounds when showing both */}
+        <FitBoundsController
+          userPosition={userPosition}
+          destination={destination}
+          trigger={fitBoundsTrigger}
+        />
 
         {/* User location marker */}
         {userPosition && (
@@ -216,6 +295,54 @@ export default function Map({
           <span className="text-sm font-medium">
             {Math.round(bearing)}°
           </span>
+        </div>
+      )}
+
+      {/* Map controls */}
+      {userPosition && destination && (
+        <div className="absolute bottom-4 left-4 flex flex-col gap-2">
+          {/* Center on me button */}
+          <button
+            onClick={() => {
+              setShowBothLocations(false);
+              setCenterUserTrigger(t => t + 1);
+            }}
+            className="w-10 h-10 bg-dark-surface/90 backdrop-blur-sm rounded-lg flex items-center justify-center shadow-lg border border-dark-border hover:border-primary transition-colors"
+            title="Center on my location"
+          >
+            <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" strokeWidth="2" fill="none" />
+            </svg>
+          </button>
+
+          {/* Center on destination button */}
+          <button
+            onClick={() => {
+              setShowBothLocations(false);
+              setCenterDestinationTrigger(t => t + 1);
+            }}
+            className="w-10 h-10 bg-dark-surface/90 backdrop-blur-sm rounded-lg flex items-center justify-center shadow-lg border border-dark-border hover:border-primary transition-colors"
+            title="Center on destination"
+          >
+            <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+            </svg>
+          </button>
+
+          {/* Show both button */}
+          <button
+            onClick={() => {
+              setShowBothLocations(true);
+              setFitBoundsTrigger(t => t + 1);
+            }}
+            className="w-10 h-10 bg-dark-surface/90 backdrop-blur-sm rounded-lg flex items-center justify-center shadow-lg border border-dark-border hover:border-primary transition-colors"
+            title="Show both locations"
+          >
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
         </div>
       )}
 
