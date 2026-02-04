@@ -22,23 +22,30 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search addr
   }, []);
 
   const searchPlaces = useCallback(async (searchQuery) => {
+    console.log('searchPlaces called with:', searchQuery);
+
     if (!searchQuery || searchQuery.length < 2) {
+      console.log('Query too short, skipping');
       setResults([]);
       setIsOpen(false);
       return;
     }
 
     setIsLoading(true);
+    console.log('Starting search...');
 
     try {
       // Using format=jsonv2 and no custom headers for better iOS compatibility
       const url = `${NOMINATIM_URL}?format=jsonv2&q=${encodeURIComponent(searchQuery)}&limit=5&addressdetails=1`;
+      console.log('Fetching URL:', url);
 
       const response = await fetch(url);
+      console.log('Response status:', response.status);
 
-      if (!response.ok) throw new Error('Search failed');
+      if (!response.ok) throw new Error('Search failed with status: ' + response.status);
 
       const data = await response.json();
+      console.log('Search results:', data);
 
       if (data.length === 0) {
         setResults([{ id: 'no-results', name: 'No results found. Try a different search or tap on the map.', noResult: true }]);
@@ -68,8 +75,11 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search addr
   };
 
   const handleSearch = () => {
+    console.log('handleSearch called, query:', query, 'length:', query.length);
     if (query.length >= 2) {
       searchPlaces(query);
+    } else {
+      console.log('Query too short for search');
     }
   };
 
