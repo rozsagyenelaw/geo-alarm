@@ -119,6 +119,7 @@ function AppContent() {
 
   // Handle location selection from map
   const handleLocationSelect = useCallback((location) => {
+    console.log('App: handleLocationSelect called with:', location);
     setTripDestination(location);
     setIsSelecting(false);
   }, [setTripDestination]);
@@ -219,7 +220,7 @@ function AppContent() {
         {view === 'map' && (
           <>
             {/* Search bar */}
-            <div className="p-4 pb-2">
+            <div className="p-4 pb-2 relative z-[9999]">
               <SearchBar
                 onLocationSelect={handleLocationSelect}
                 placeholder="Search destination..."

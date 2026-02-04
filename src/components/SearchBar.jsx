@@ -8,17 +8,25 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search addr
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
+  const justOpenedRef = useRef(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
+      // Skip if we just opened the dropdown
+      if (justOpenedRef.current) {
+        console.log('Skipping close - just opened');
+        justOpenedRef.current = false;
+        return;
+      }
       if (containerRef.current && !containerRef.current.contains(event.target)) {
+        console.log('Click outside detected, closing dropdown');
         setIsOpen(false);
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
   const searchPlaces = useCallback(async (searchQuery) => {
@@ -50,15 +58,19 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search addr
       if (data.length === 0) {
         setResults([{ id: 'no-results', name: 'No results found. Try a different search or tap on the map.', noResult: true }]);
       } else {
-        setResults(data.map(item => ({
+        const mappedResults = data.map(item => ({
           id: item.place_id,
           name: item.display_name,
           lat: parseFloat(item.lat),
           lon: parseFloat(item.lon),
           type: item.type
-        })));
+        }));
+        console.log('Setting results:', mappedResults);
+        setResults(mappedResults);
       }
 
+      console.log('Setting isOpen to true');
+      justOpenedRef.current = true;
       setIsOpen(true);
     } catch (error) {
       console.error('Search error:', error);
@@ -91,11 +103,14 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search addr
   };
 
   const handleSelect = (result) => {
-    onLocationSelect({
+    console.log('handleSelect called with:', result);
+    const location = {
       lat: result.lat,
       lon: result.lon,
       name: result.name.split(',')[0]
-    });
+    };
+    console.log('Calling onLocationSelect with:', location);
+    onLocationSelect(location);
     setQuery(result.name.split(',')[0]);
     setIsOpen(false);
   };
@@ -165,8 +180,9 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search addr
       </div>
 
       {/* Results dropdown */}
+      {console.log('Render check - isOpen:', isOpen, 'results.length:', results.length)}
       {isOpen && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-dark-surface border border-dark-border rounded-xl overflow-hidden shadow-xl z-50">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-dark-surface border border-dark-border rounded-xl overflow-hidden shadow-xl z-[9999]">
           {results.map((result) => (
             result.noResult ? (
               <div key={result.id} className="px-4 py-3 text-gray-400 text-center">

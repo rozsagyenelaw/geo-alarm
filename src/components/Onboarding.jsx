@@ -68,6 +68,16 @@ export default function Onboarding({ onComplete }) {
   const step = STEPS[currentStep];
   const isLastStep = currentStep === STEPS.length - 1;
 
+  // Safety check - if step is undefined, show loading or reset
+  if (!step) {
+    console.error('Invalid step index:', currentStep, 'STEPS length:', STEPS.length);
+    return (
+      <div className="fixed inset-0 bg-dark-bg z-50 flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   const requestLocationPermission = async () => {
     // Always use getCurrentPosition to trigger the permission prompt on iOS
     return new Promise((resolve) => {
@@ -116,6 +126,8 @@ export default function Onboarding({ onComplete }) {
   };
 
   const handleNext = async () => {
+    console.log('handleNext called, currentStep:', currentStep, 'step:', step?.id);
+
     if (step.permission === 'location') {
       await requestLocationPermission();
     } else if (step.permission === 'notifications') {
@@ -123,9 +135,11 @@ export default function Onboarding({ onComplete }) {
     }
 
     if (isLastStep) {
+      console.log('Last step, completing onboarding');
       updateSettings({ onboardingComplete: true });
       onComplete();
     } else {
+      console.log('Moving to next step:', currentStep + 1);
       setCurrentStep(prev => prev + 1);
     }
   };
