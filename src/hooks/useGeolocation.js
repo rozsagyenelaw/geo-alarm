@@ -9,8 +9,8 @@ const PERMISSION_STATES = {
 
 const DEFAULT_OPTIONS = {
   enableHighAccuracy: true,
-  timeout: 10000,
-  maximumAge: 0
+  timeout: 20000, // Increased for iOS which can be slow
+  maximumAge: 5000 // Allow slightly cached positions
 };
 
 export function useGeolocation(options = {}) {

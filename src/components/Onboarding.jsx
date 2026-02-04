@@ -69,48 +69,27 @@ export default function Onboarding({ onComplete }) {
   const isLastStep = currentStep === STEPS.length - 1;
 
   const requestLocationPermission = async () => {
-    try {
-      const result = await navigator.permissions.query({ name: 'geolocation' });
-
-      if (result.state === 'granted') {
-        setPermissionStatus(prev => ({ ...prev, location: 'granted' }));
-        updateSettings({ hasLocationPermission: true });
-        return true;
-      } else if (result.state === 'prompt') {
-        // Trigger the permission prompt
-        return new Promise((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            () => {
-              setPermissionStatus(prev => ({ ...prev, location: 'granted' }));
-              updateSettings({ hasLocationPermission: true });
-              resolve(true);
-            },
-            () => {
-              setPermissionStatus(prev => ({ ...prev, location: 'denied' }));
-              resolve(false);
-            }
-          );
-        });
-      } else {
-        setPermissionStatus(prev => ({ ...prev, location: 'denied' }));
-        return false;
-      }
-    } catch (e) {
-      // Fallback for browsers that don't support permissions API
-      return new Promise((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          () => {
-            setPermissionStatus(prev => ({ ...prev, location: 'granted' }));
-            updateSettings({ hasLocationPermission: true });
-            resolve(true);
-          },
-          () => {
-            setPermissionStatus(prev => ({ ...prev, location: 'denied' }));
-            resolve(false);
-          }
-        );
-      });
-    }
+    // Always use getCurrentPosition to trigger the permission prompt on iOS
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log('Location granted:', position.coords);
+          setPermissionStatus(prev => ({ ...prev, location: 'granted' }));
+          updateSettings({ hasLocationPermission: true });
+          resolve(true);
+        },
+        (error) => {
+          console.log('Location error:', error.code, error.message);
+          setPermissionStatus(prev => ({ ...prev, location: 'denied' }));
+          resolve(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0
+        }
+      );
+    });
   };
 
   const requestNotificationPermission = async () => {
@@ -249,6 +228,20 @@ export default function Onboarding({ onComplete }) {
             className="w-full py-2 text-gray-400 hover:text-white transition-colors"
           >
             Skip for now
+          </button>
+        )}
+
+        {/* Quick start option on first step */}
+        {currentStep === 0 && (
+          <button
+            onClick={async () => {
+              await requestLocationPermission();
+              updateSettings({ onboardingComplete: true });
+              onComplete();
+            }}
+            className="w-full py-2 mt-2 text-secondary hover:text-secondary/80 transition-colors text-sm"
+          >
+            Quick Start (enable location & skip)
           </button>
         )}
       </div>

@@ -72,7 +72,14 @@ function AppContent() {
     }
   }, [isLoaded, settings.onboardingComplete]);
 
-  // Start tracking when alarm is armed
+  // Start location tracking immediately when app loads
+  useEffect(() => {
+    if (isLoaded && settings.onboardingComplete && !isTracking) {
+      startTracking();
+    }
+  }, [isLoaded, settings.onboardingComplete, isTracking, startTracking]);
+
+  // Also start tracking when alarm is armed
   useEffect(() => {
     if (alarm.isArmed && !isTracking) {
       startTracking();
