@@ -2,12 +2,11 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 
-export default function SearchBar({ onLocationSelect, placeholder = 'Search for a place...' }) {
+export default function SearchBar({ onLocationSelect, placeholder = 'Search address or place...' }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const searchTimeout = useRef(null);
   const containerRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -23,30 +22,26 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search for 
   }, []);
 
   const searchPlaces = useCallback(async (searchQuery) => {
-    if (!searchQuery || searchQuery.length < 3) {
+    if (!searchQuery || searchQuery.length < 2) {
       setResults([]);
+      setIsOpen(false);
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        `${NOMINATIM_URL}?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&addressdetails=1`,
-        {
-          headers: {
-            'Accept-Language': 'en',
-            'User-Agent': 'GeoWake/1.0 (https://geo-alarm.netlify.app)'
-          }
-        }
-      );
+      // Using format=jsonv2 and no custom headers for better iOS compatibility
+      const url = `${NOMINATIM_URL}?format=jsonv2&q=${encodeURIComponent(searchQuery)}&limit=5&addressdetails=1`;
+
+      const response = await fetch(url);
 
       if (!response.ok) throw new Error('Search failed');
 
       const data = await response.json();
 
       if (data.length === 0) {
-        setResults([{ id: 'no-results', name: 'No results found', noResult: true }]);
+        setResults([{ id: 'no-results', name: 'No results found. Try a different search or tap on the map.', noResult: true }]);
       } else {
         setResults(data.map(item => ({
           id: item.place_id,
@@ -60,7 +55,7 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search for 
       setIsOpen(true);
     } catch (error) {
       console.error('Search error:', error);
-      setResults([{ id: 'error', name: 'Search failed. Try tapping on the map instead.', noResult: true }]);
+      setResults([{ id: 'error', name: 'Search failed. Tap on the map to set destination.', noResult: true }]);
       setIsOpen(true);
     } finally {
       setIsLoading(false);
@@ -70,15 +65,19 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search for 
   const handleInputChange = (e) => {
     const value = e.target.value;
     setQuery(value);
+  };
 
-    // Debounce search
-    if (searchTimeout.current) {
-      clearTimeout(searchTimeout.current);
+  const handleSearch = () => {
+    if (query.length >= 2) {
+      searchPlaces(query);
     }
+  };
 
-    searchTimeout.current = setTimeout(() => {
-      searchPlaces(value);
-    }, 300);
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSearch();
+    }
   };
 
   const handleSelect = (result) => {
@@ -99,46 +98,60 @@ export default function SearchBar({ onLocationSelect, placeholder = 'Search for 
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={handleInputChange}
-          onFocus={() => results.length > 0 && setIsOpen(true)}
-          placeholder={placeholder}
-          className="w-full bg-dark-surface border border-dark-border rounded-xl px-4 py-3 pl-10 pr-10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-        />
-
-        {/* Search icon */}
-        <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={query}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onFocus={() => results.length > 0 && setIsOpen(true)}
+            placeholder={placeholder}
+            className="w-full bg-dark-surface border border-dark-border rounded-xl px-4 py-3 pl-10 pr-10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           />
-        </svg>
 
-        {/* Loading spinner or clear button */}
-        {isLoading ? (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : query && (
-          <button
-            onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+          {/* Search icon */}
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+
+          {/* Loading spinner or clear button */}
+          {isLoading ? (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : query && (
+            <button
+              onClick={handleClear}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Search button */}
+        <button
+          onClick={handleSearch}
+          disabled={query.length < 2 || isLoading}
+          className="px-4 bg-primary hover:bg-primary-dark disabled:bg-gray-600 disabled:cursor-not-allowed rounded-xl transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
       </div>
 
       {/* Results dropdown */}
