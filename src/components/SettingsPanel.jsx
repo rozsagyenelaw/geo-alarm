@@ -244,6 +244,15 @@ export default function SettingsPanel({ onClose, cacheSize = 0, onClearCache }) 
         {/* Reset */}
         <SettingSection title="Data">
           <button
+            onClick={() => {
+              updateSettings({ onboardingComplete: false });
+              window.location.reload();
+            }}
+            className="w-full py-3 bg-dark-surface border border-dark-border rounded-xl font-medium hover:border-primary transition-colors mb-3"
+          >
+            Restart Setup Wizard
+          </button>
+          <button
             onClick={() => setShowResetConfirm(true)}
             className="w-full py-3 bg-danger/20 text-danger rounded-xl font-medium hover:bg-danger/30 transition-colors"
           >
