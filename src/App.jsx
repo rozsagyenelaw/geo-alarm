@@ -7,6 +7,7 @@ import { useOfflineMode, formatCacheSize } from './hooks/useOfflineMode';
 import { createSpeedTracker, calculateETA } from './utils/arrivalEstimate';
 import { calculateDistance } from './utils/distance';
 import { startBackgroundKeepAlive, stopBackgroundKeepAlive } from './utils/backgroundKeepAlive';
+import { isNative } from './platform';
 
 import Map from './components/Map';
 import SearchBar from './components/SearchBar';
@@ -91,19 +92,19 @@ function AppContent() {
   }, [alarm.isArmed, isTracking, startTracking]);
 
   // Start/stop background keep-alive when alarm is armed/disarmed.
-  // Silent audio prevents the browser from suspending JS when screen is off.
-  // The onTick callback triggers fallback GPS polling every ~10s.
+  // On native, the background geolocation plugin handles everything.
+  // On web, silent audio prevents the browser from suspending JS when screen is off.
   useEffect(() => {
     if (alarm.isArmed) {
       enableBackgroundTracking();
-      startBackgroundKeepAlive(doFallbackPoll);
+      if (!isNative) startBackgroundKeepAlive(doFallbackPoll);
     } else {
       disableBackgroundTracking();
-      stopBackgroundKeepAlive();
+      if (!isNative) stopBackgroundKeepAlive();
     }
 
     return () => {
-      stopBackgroundKeepAlive();
+      if (!isNative) stopBackgroundKeepAlive();
     };
   }, [alarm.isArmed, enableBackgroundTracking, disableBackgroundTracking, doFallbackPoll]);
 

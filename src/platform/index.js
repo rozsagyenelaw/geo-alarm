@@ -1,6 +1,7 @@
 // Platform abstraction layer
 // Provides a unified interface for platform-specific functionality
-// When converting to native app with Capacitor, replace web.js imports with native.js
+// Web exports always work (including in Capacitor WebView).
+// Background geolocation is lazy-loaded from native.js only when running in Capacitor.
 
 import * as web from './web';
 
@@ -13,7 +14,7 @@ export const isAndroid = /Android/.test(navigator.userAgent);
 export const isMobile = isIOS || isAndroid;
 
 // Export platform-specific implementations
-// In native mode, these would come from native.js instead
+// Web implementations work in both browser and Capacitor WebView
 export const {
   vibrate,
   stopVibration,
@@ -30,6 +31,23 @@ export const {
   loadFromStorage,
   removeFromStorage
 } = web;
+
+// Background geolocation — lazy-loaded from native.js only on Capacitor
+// This keeps native.js (with its plugin imports) out of the web bundle
+export async function startBackgroundGeolocation(callback, errorCallback, options) {
+  if (!isNative) {
+    console.warn('startBackgroundGeolocation called on web — not supported');
+    return;
+  }
+  const native = await import('./native.js');
+  return native.startBackgroundGeolocation(callback, errorCallback, options);
+}
+
+export async function stopBackgroundGeolocation() {
+  if (!isNative) return;
+  const native = await import('./native.js');
+  return native.stopBackgroundGeolocation();
+}
 
 // Check feature availability
 export function checkFeatureSupport() {

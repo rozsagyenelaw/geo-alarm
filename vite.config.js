@@ -2,9 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig({
-  plugins: [
-    react(),
+const isCapacitor = process.env.BUILD_TARGET === 'capacitor'
+
+const plugins = [react()]
+
+if (!isCapacitor) {
+  plugins.push(
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['robots.txt', 'icons/*.svg'],
@@ -67,7 +70,12 @@ export default defineConfig({
         ]
       }
     })
-  ],
+  )
+}
+
+export default defineConfig({
+  base: isCapacitor ? './' : '/',
+  plugins,
   css: {
     postcss: './postcss.config.js'
   }

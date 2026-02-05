@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { isNative, startBackgroundGeolocation, stopBackgroundGeolocation } from '../platform';
 
 const PERMISSION_STATES = {
   UNKNOWN: 'unknown',
@@ -27,10 +28,11 @@ export function useGeolocation(options = {}) {
   const lastUpdateRef = useRef(null);
   const fallbackIntervalRef = useRef(null);
   const isBackgroundActiveRef = useRef(false);
+  const nativeTrackingRef = useRef(false);
 
   // Check permission state
   useEffect(() => {
-    if ('permissions' in navigator) {
+    if (!isNative && 'permissions' in navigator) {
       navigator.permissions.query({ name: 'geolocation' })
         .then(result => {
           setPermissionState(result.state);
@@ -69,10 +71,52 @@ export function useGeolocation(options = {}) {
     });
   }, []);
 
+  // --- Native (Capacitor) path ---
+  const handleNativePosition = useCallback((pos) => {
+    lastUpdateRef.current = Date.now();
+    setPosition(pos);
+    setError(null);
+  }, []);
+
+  const handleNativeError = useCallback((err) => {
+    setError({
+      code: err.code,
+      message: err.message,
+      PERMISSION_DENIED: err.code === 'NOT_AUTHORIZED' || err.code === 'PERMISSION_DENIED',
+      POSITION_UNAVAILABLE: err.code === 'POSITION_UNAVAILABLE',
+      TIMEOUT: err.code === 'TIMEOUT'
+    });
+  }, []);
+
+  const startNativeTracking = useCallback(async () => {
+    if (nativeTrackingRef.current) return;
+    try {
+      await startBackgroundGeolocation(handleNativePosition, handleNativeError);
+      nativeTrackingRef.current = true;
+      setIsTracking(true);
+      setPermissionState(PERMISSION_STATES.GRANTED);
+    } catch (err) {
+      handleNativeError({ code: 'START_FAILED', message: err.message });
+    }
+  }, [handleNativePosition, handleNativeError]);
+
+  const stopNativeTracking = useCallback(async () => {
+    if (!nativeTrackingRef.current) return;
+    try {
+      await stopBackgroundGeolocation();
+    } catch (e) {
+      // ignore stop errors
+    }
+    nativeTrackingRef.current = false;
+    setIsTracking(false);
+  }, []);
+
+  // --- Web path (unchanged from original) ---
+
   // Fallback polling: if watchPosition goes silent (e.g. background/sleep),
   // periodically call getCurrentPosition to get updates
   const doFallbackPoll = useCallback(() => {
-    if (!('geolocation' in navigator)) return;
+    if (isNative || !('geolocation' in navigator)) return;
 
     const timeSinceUpdate = lastUpdateRef.current
       ? Date.now() - lastUpdateRef.current
@@ -116,7 +160,7 @@ export function useGeolocation(options = {}) {
   }, []);
 
   const restartWatch = useCallback(() => {
-    if (!('geolocation' in navigator)) return;
+    if (isNative || !('geolocation' in navigator)) return;
 
     // Clear existing watch
     if (watchIdRef.current !== null) {
@@ -152,7 +196,14 @@ export function useGeolocation(options = {}) {
     );
   }, []);
 
+  // --- Unified start/stop ---
+
   const startTracking = useCallback(() => {
+    if (isNative) {
+      startNativeTracking();
+      return;
+    }
+
     if (!('geolocation' in navigator)) {
       setError({
         code: 0,
@@ -175,31 +226,44 @@ export function useGeolocation(options = {}) {
     );
 
     setIsTracking(true);
-  }, [handleSuccess, handleError]);
+  }, [handleSuccess, handleError, startNativeTracking]);
 
   const stopTracking = useCallback(() => {
+    if (isNative) {
+      stopNativeTracking();
+      return;
+    }
+
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
       setIsTracking(false);
     }
     stopFallbackPolling();
-  }, [stopFallbackPolling]);
+  }, [stopFallbackPolling, stopNativeTracking]);
 
   // Enable background-resilient tracking (called when alarm is armed)
   const enableBackgroundTracking = useCallback(() => {
+    if (isNative) {
+      // On native the plugin already runs in background — just ensure it's started
+      if (!nativeTrackingRef.current) startNativeTracking();
+      return;
+    }
     isBackgroundActiveRef.current = true;
     startFallbackPolling();
-  }, [startFallbackPolling]);
+  }, [startFallbackPolling, startNativeTracking]);
 
   // Disable background-resilient tracking (called when alarm is disarmed)
   const disableBackgroundTracking = useCallback(() => {
+    if (isNative) return; // native tracking is stopped via stopTracking
     isBackgroundActiveRef.current = false;
     stopFallbackPolling();
   }, [stopFallbackPolling]);
 
-  // Handle visibility changes: restart watchPosition when app comes back
+  // Handle visibility changes: restart watchPosition when app comes back (web only)
   useEffect(() => {
+    if (isNative) return; // Not needed on native
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && isTracking) {
         // App came back to foreground - restart watch to get fresh updates
@@ -256,11 +320,17 @@ export function useGeolocation(options = {}) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-      if (fallbackIntervalRef.current) {
-        clearInterval(fallbackIntervalRef.current);
+      if (isNative) {
+        if (nativeTrackingRef.current) {
+          stopBackgroundGeolocation().catch(() => {});
+        }
+      } else {
+        if (watchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+        }
+        if (fallbackIntervalRef.current) {
+          clearInterval(fallbackIntervalRef.current);
+        }
       }
     };
   }, []);
@@ -270,7 +340,7 @@ export function useGeolocation(options = {}) {
     error,
     permissionState,
     isTracking,
-    isSupported: 'geolocation' in navigator,
+    isSupported: isNative || 'geolocation' in navigator,
     startTracking,
     stopTracking,
     getCurrentPosition,
