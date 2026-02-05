@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { TripProvider, useTrip } from './context/TripContext';
 import { useGeolocation } from './hooks/useGeolocation';
@@ -6,6 +6,7 @@ import { useAlarm } from './hooks/useAlarm';
 import { useOfflineMode, formatCacheSize } from './hooks/useOfflineMode';
 import { createSpeedTracker, calculateETA } from './utils/arrivalEstimate';
 import { calculateDistance } from './utils/distance';
+import { startBackgroundKeepAlive, stopBackgroundKeepAlive } from './utils/backgroundKeepAlive';
 
 import Map from './components/Map';
 import SearchBar from './components/SearchBar';
@@ -39,7 +40,10 @@ function AppContent() {
     error: geoError,
     isTracking,
     startTracking,
-    stopTracking
+    stopTracking,
+    enableBackgroundTracking,
+    disableBackgroundTracking,
+    doFallbackPoll
   } = useGeolocation();
 
   const alarm = useAlarm({
@@ -85,6 +89,23 @@ function AppContent() {
       startTracking();
     }
   }, [alarm.isArmed, isTracking, startTracking]);
+
+  // Start/stop background keep-alive when alarm is armed/disarmed.
+  // Silent audio prevents the browser from suspending JS when screen is off.
+  // The onTick callback triggers fallback GPS polling every ~10s.
+  useEffect(() => {
+    if (alarm.isArmed) {
+      enableBackgroundTracking();
+      startBackgroundKeepAlive(doFallbackPoll);
+    } else {
+      disableBackgroundTracking();
+      stopBackgroundKeepAlive();
+    }
+
+    return () => {
+      stopBackgroundKeepAlive();
+    };
+  }, [alarm.isArmed, enableBackgroundTracking, disableBackgroundTracking, doFallbackPoll]);
 
   // Update speed tracker and check alarm
   useEffect(() => {

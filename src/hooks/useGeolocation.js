@@ -13,6 +13,9 @@ const DEFAULT_OPTIONS = {
   maximumAge: 5000 // Allow slightly cached positions
 };
 
+// How long watchPosition can be silent before we consider it stale
+const WATCH_STALE_THRESHOLD = 15000; // 15 seconds
+
 export function useGeolocation(options = {}) {
   const [position, setPosition] = useState(null);
   const [error, setError] = useState(null);
@@ -21,6 +24,9 @@ export function useGeolocation(options = {}) {
 
   const watchIdRef = useRef(null);
   const optionsRef = useRef({ ...DEFAULT_OPTIONS, ...options });
+  const lastUpdateRef = useRef(null);
+  const fallbackIntervalRef = useRef(null);
+  const isBackgroundActiveRef = useRef(false);
 
   // Check permission state
   useEffect(() => {
@@ -39,6 +45,7 @@ export function useGeolocation(options = {}) {
   }, []);
 
   const handleSuccess = useCallback((pos) => {
+    lastUpdateRef.current = Date.now();
     setPosition({
       lat: pos.coords.latitude,
       lon: pos.coords.longitude,
@@ -60,6 +67,89 @@ export function useGeolocation(options = {}) {
       POSITION_UNAVAILABLE: err.code === 2,
       TIMEOUT: err.code === 3
     });
+  }, []);
+
+  // Fallback polling: if watchPosition goes silent (e.g. background/sleep),
+  // periodically call getCurrentPosition to get updates
+  const doFallbackPoll = useCallback(() => {
+    if (!('geolocation' in navigator)) return;
+
+    const timeSinceUpdate = lastUpdateRef.current
+      ? Date.now() - lastUpdateRef.current
+      : Infinity;
+
+    // Only poll if watchPosition hasn't fired recently
+    if (timeSinceUpdate > WATCH_STALE_THRESHOLD) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          lastUpdateRef.current = Date.now();
+          setPosition({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            altitude: pos.coords.altitude,
+            altitudeAccuracy: pos.coords.altitudeAccuracy,
+            heading: pos.coords.heading,
+            speed: pos.coords.speed,
+            timestamp: pos.timestamp
+          });
+          setError(null);
+        },
+        () => {
+          // Silently ignore fallback errors - watchPosition is the primary source
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  }, []);
+
+  const startFallbackPolling = useCallback(() => {
+    if (fallbackIntervalRef.current) return;
+    fallbackIntervalRef.current = setInterval(doFallbackPoll, 10000);
+  }, [doFallbackPoll]);
+
+  const stopFallbackPolling = useCallback(() => {
+    if (fallbackIntervalRef.current) {
+      clearInterval(fallbackIntervalRef.current);
+      fallbackIntervalRef.current = null;
+    }
+  }, []);
+
+  const restartWatch = useCallback(() => {
+    if (!('geolocation' in navigator)) return;
+
+    // Clear existing watch
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+
+    // Start fresh watch
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        lastUpdateRef.current = Date.now();
+        setPosition({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          altitude: pos.coords.altitude,
+          altitudeAccuracy: pos.coords.altitudeAccuracy,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+          timestamp: pos.timestamp
+        });
+        setError(null);
+      },
+      (err) => {
+        setError({
+          code: err.code,
+          message: err.message,
+          PERMISSION_DENIED: err.code === 1,
+          POSITION_UNAVAILABLE: err.code === 2,
+          TIMEOUT: err.code === 3
+        });
+      },
+      optionsRef.current
+    );
   }, []);
 
   const startTracking = useCallback(() => {
@@ -93,7 +183,44 @@ export function useGeolocation(options = {}) {
       watchIdRef.current = null;
       setIsTracking(false);
     }
-  }, []);
+    stopFallbackPolling();
+  }, [stopFallbackPolling]);
+
+  // Enable background-resilient tracking (called when alarm is armed)
+  const enableBackgroundTracking = useCallback(() => {
+    isBackgroundActiveRef.current = true;
+    startFallbackPolling();
+  }, [startFallbackPolling]);
+
+  // Disable background-resilient tracking (called when alarm is disarmed)
+  const disableBackgroundTracking = useCallback(() => {
+    isBackgroundActiveRef.current = false;
+    stopFallbackPolling();
+  }, [stopFallbackPolling]);
+
+  // Handle visibility changes: restart watchPosition when app comes back
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isTracking) {
+        // App came back to foreground - restart watch to get fresh updates
+        restartWatch();
+
+        // Also do an immediate position request
+        if ('geolocation' in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            handleSuccess,
+            () => {}, // ignore errors on this quick poll
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isTracking, restartWatch, handleSuccess]);
 
   const getCurrentPosition = useCallback(() => {
     return new Promise((resolve, reject) => {
@@ -132,6 +259,9 @@ export function useGeolocation(options = {}) {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
+      if (fallbackIntervalRef.current) {
+        clearInterval(fallbackIntervalRef.current);
+      }
     };
   }, []);
 
@@ -144,6 +274,9 @@ export function useGeolocation(options = {}) {
     startTracking,
     stopTracking,
     getCurrentPosition,
+    enableBackgroundTracking,
+    disableBackgroundTracking,
+    doFallbackPoll,
     PERMISSION_STATES
   };
 }
@@ -158,6 +291,9 @@ export function useAdaptiveGeolocation(destination, options = {}) {
     startTracking: baseStartTracking,
     stopTracking,
     getCurrentPosition,
+    enableBackgroundTracking,
+    disableBackgroundTracking,
+    doFallbackPoll,
     PERMISSION_STATES
   } = useGeolocation(options);
 
@@ -204,6 +340,9 @@ export function useAdaptiveGeolocation(destination, options = {}) {
     startTracking,
     stopTracking,
     getCurrentPosition,
+    enableBackgroundTracking,
+    disableBackgroundTracking,
+    doFallbackPoll,
     PERMISSION_STATES
   };
 }
